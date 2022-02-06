@@ -373,6 +373,92 @@ void main()
                                 yield return new object[] { srcSetMultiple, srcBindingMultiple, dstSetMultiple, dstBindingMultiple, combinedLayout };
                             }
         }
+
+        [Fact]
+        public unsafe void ComputeShader_R8_UInt_ImageRead_ImageStore()
+        {
+            // Just a dumb compute shader that fills a 3D texture with the same value from a uniform multiplied by the depth.
+            string shaderText = @"
+#version 430
+layout(set = 0, binding = 0, r8ui) uniform uimage2D inputTexture;
+layout(set = 0, binding = 1, r8ui) uniform uimage2D outputTexture;
+
+layout(local_size_x = 16, local_size_y = 16) in;
+void main()
+{
+    ivec2 textureCoordinate = ivec2(gl_GlobalInvocationID.xy);
+    uvec4 color = imageLoad(inputTexture, textureCoordinate);
+
+    imageStore(outputTexture, textureCoordinate, color);
+}
+";
+
+            const byte expectedValue = 255;
+            const uint TextureSize = 32;
+
+            using Shader computeShader = RF.CreateFromSpirv(new ShaderDescription(
+                ShaderStages.Compute,
+                Encoding.ASCII.GetBytes(shaderText),
+                "main"));
+
+            using ResourceLayout computeLayout = RF.CreateResourceLayout(new ResourceLayoutDescription(
+                new ResourceLayoutElementDescription("InputTexture", ResourceKind.TextureReadOnly, ShaderStages.Compute),
+                new ResourceLayoutElementDescription("OutputTexture", ResourceKind.TextureReadWrite, ShaderStages.Compute)));
+
+            using Pipeline computePipeline = RF.CreateComputePipeline(new ComputePipelineDescription(
+                computeShader,
+                computeLayout,
+                16, 16, 1));
+
+            using Texture inputTexture = RF.CreateTexture(TextureDescription.Texture3D(
+                TextureSize,
+                TextureSize,
+                1,
+                1,
+                PixelFormat.R8_UInt,
+                TextureUsage.Sampled | TextureUsage.Storage));
+
+            using TextureView inputTextureView = RF.CreateTextureView(inputTexture);
+
+            byte[] data = Enumerable.Range(0, (int)(inputTexture.Width * inputTexture.Height)).Select(i => expectedValue).ToArray();
+            fixed (byte* dataPtr = &data[0])
+            {
+                GD.UpdateTexture(inputTexture, (IntPtr)dataPtr, (uint)(data.Length * sizeof(byte)), 0, 0, 0, inputTexture.Width, inputTexture.Height, 1, 0, 0);
+            }
+
+            using Texture outputTexture = RF.CreateTexture(TextureDescription.Texture3D(
+                TextureSize,
+                TextureSize,
+                1,
+                1,
+                PixelFormat.R8_UInt,
+                TextureUsage.Sampled | TextureUsage.Storage));
+
+            using TextureView outputTextureView = RF.CreateTextureView(outputTexture);
+
+            using ResourceSet computeResourceSet = RF.CreateResourceSet(new ResourceSetDescription(
+                computeLayout,
+                inputTextureView,
+                outputTextureView));
+
+            using CommandList cl = RF.CreateCommandList();
+            cl.Begin();
+
+            // Use the compute shader to fill the texture.
+            cl.SetPipeline(computePipeline);
+            cl.SetComputeResourceSet(0, computeResourceSet);
+            const uint GroupDivisorXY = 16;
+            cl.Dispatch(TextureSize / GroupDivisorXY, TextureSize / GroupDivisorXY, 1);
+
+            cl.End();
+            GD.SubmitCommands(cl);
+            GD.WaitForIdle();
+
+            // Read back from our texture and make sure it has been properly filled.
+            int notFilledCount = CountTexelsNotFilledAtDepth(GD, outputTexture, expectedValue, 0);
+
+            Assert.Equal(0, notFilledCount);
+        }
     }
 
 #if TEST_OPENGL
