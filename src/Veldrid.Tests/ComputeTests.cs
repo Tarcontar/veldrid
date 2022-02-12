@@ -6,6 +6,7 @@ using System.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Veldrid.SPIRV;
+using Vortice.Direct3D11;
 using Xunit;
 
 namespace Veldrid.Tests
@@ -410,7 +411,7 @@ void main()
                 computeLayout,
                 16, 16, 1));
 
-            using Texture inputTexture = RF.CreateTexture(TextureDescription.Texture3D(
+            using Texture inputTexture = RF.CreateTexture(TextureDescription.Texture2D(
                 TextureSize,
                 TextureSize,
                 1,
@@ -426,7 +427,7 @@ void main()
                 GD.UpdateTexture(inputTexture, (IntPtr)dataPtr, (uint)(data.Length * sizeof(byte)), 0, 0, 0, inputTexture.Width, inputTexture.Height, 1, 0, 0);
             }
 
-            using Texture outputTexture = RF.CreateTexture(TextureDescription.Texture3D(
+            using Texture outputTexture = RF.CreateTexture(TextureDescription.Texture2D(
                 TextureSize,
                 TextureSize,
                 1,
@@ -449,7 +450,7 @@ void main()
             cl.SetComputeResourceSet(0, computeResourceSet);
             const uint GroupDivisorXY = 16;
             cl.Dispatch(TextureSize / GroupDivisorXY, TextureSize / GroupDivisorXY, 1);
-
+            
             cl.End();
             GD.SubmitCommands(cl);
             GD.WaitForIdle();
