@@ -403,7 +403,7 @@ void main()
                 "main"));
 
             using ResourceLayout computeLayout = RF.CreateResourceLayout(new ResourceLayoutDescription(
-                new ResourceLayoutElementDescription("InputTexture", ResourceKind.TextureReadOnly, ShaderStages.Compute),
+                new ResourceLayoutElementDescription("InputTexture", ResourceKind.TextureReadWrite, ShaderStages.Compute),
                 new ResourceLayoutElementDescription("OutputTexture", ResourceKind.TextureReadWrite, ShaderStages.Compute)));
 
             using Pipeline computePipeline = RF.CreateComputePipeline(new ComputePipelineDescription(
